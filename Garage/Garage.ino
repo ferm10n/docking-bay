@@ -43,12 +43,12 @@ void setup(void) {
 void loop(void) {
   wl_status_t wifiStatus = WiFi.status();
   if (wifiStatus != WL_CONNECTED) {
-    if (previousWifiStatus === WL_CONNECTED) { // a disconnect just happened
+    if (previousWifiStatus == WL_CONNECTED) { // a disconnect just happened
       blinkWifiLed(1000); // long pause to show portal is being activated
       blinkingWifiStart(); // enable intermittent blinks to show portal is active
       wm.autoConnect(APSSID, APPSK); // try to let a connection be configured
     }
-  } else if (previousWifiStatus !== WL_CONNECTED) { // did a connection just happen?
+  } else if (previousWifiStatus != WL_CONNECTED) { // did a connection just happen?
     // connected to AP!
     blinkingWifiStop(); // stop the intermittent blinking
 
