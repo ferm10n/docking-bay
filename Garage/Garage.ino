@@ -2,13 +2,15 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 
+#include "WifiStuff.h"
 #include "Constants.h"
 #include "WebServer.h"
-#include "WifiStuff.h"
 #include "LedStuff.h"
 
 const char* ssid = STASSID;
 const char* password = STAPSK;
+bool disconnectTrigger = false;
+wl_status_t previousWifiStatus = WL_CONNECTED; // initially set to be connected to the first real disconnect status triggers a blink
 
 
 void setup(void) {
@@ -24,40 +26,43 @@ void setup(void) {
 
   // allow serial connections
   Serial.begin(74880);
-  blinkTriggerLed(3000); // pause to allow connection
+  blinkTriggerLed(3000); // pause to allow serial connection
+
+  // the wifi manager (wm) creates a new server instance every time it needs to perform a new connection.
+  // instead of trying to worry about when it does this and making sure we attach our routes correctly,
+  // we can simply add a callback to when a new instance is created!
+  wm.setWebServerCallback([]() {
+    setupWebServer();
+    setupOta();
+  });
 
   setupWifi();
-  // // setup wifi 
-  // Serial.printf("Trying to connect to %s (%s)", ssid, password);
-  // WiFi.mode(WIFI_STA);
-  // WiFi.begin(ssid, password);
-  // Serial.println("");
-
-  // // Wait for connection
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   delay(450);
-  //   Serial.print(WIFI_LED);
-  //   Serial.print(".");
-
-  //   digitalWrite(WIFI_LED, LED_ON);
-  //   delay(50);
-  //   digitalWrite(WIFI_LED, LED_OFF);
-  // }
-  // Serial.println("");
-  // digitalWrite(1, LED_ON);
-  // Serial.print("Connected!");
-  // Serial.print("IP address: ");
-  // Serial.println(WiFi.localIP());
-  // delay(1000);
-  // digitalWrite(WIFI_LED, LED_OFF);
-
-  // setupWebServer();
-  // setupOta();
-  // Serial.println("HTTP server started");
 }
 
 
 void loop(void) {
-  loopWifiManager() || loopWebServer();
-  yield();
+  wl_status_t wifiStatus = WiFi.status();
+  if (wifiStatus != WL_CONNECTED) {
+    if (previousWifiStatus === WL_CONNECTED) { // a disconnect just happened
+      blinkWifiLed(1000); // long pause to show portal is being activated
+      blinkingWifiStart(); // enable intermittent blinks to show portal is active
+      wm.autoConnect(APSSID, APPSK); // try to let a connection be configured
+    }
+  } else if (previousWifiStatus !== WL_CONNECTED) { // did a connection just happen?
+    // connected to AP!
+    blinkingWifiStop(); // stop the intermittent blinking
+
+    // successful blink pattern
+    blinkWifiLed(50);
+    delay(200);
+    blinkWifiLed(50);
+    delay(200);
+    blinkWifiLed(50);
+    delay(200);
+
+    // allow configuration to happen even after connection is made
+    wm.startWebPortal();
+  }
+  previousWifiStatus = wifiStatus;
+  wm.process(); // wm must always be running since its server is used for everything
 }

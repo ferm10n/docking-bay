@@ -6,65 +6,43 @@
 #include <WiFiClient.h>
 #include "Constants.h"
 
-ESP8266WebServer server(80);
-
 bool otaEnabled = false;
-const char* otaIndex = "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><input type='submit' value='Update'></form>";
+const char* otaIndex = "<form method='POST' action='/ota-post' enctype='multipart/form-data'>Send .bin file: <input type='file' name='update'><input type='submit' value='Update'></form>";
 
-void handleRoot() {
+void handleOtaForm() {
   if (otaEnabled) {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/html", otaIndex);
+    wm.server->sendHeader("Connection", "close");
+    wm.server->send(200, "text/html", otaIndex);
   } else {
-    server.send(200, "text/plain", "hello from esp8266!");
+    wm.server->send(400, "text/plain", "OTA is disabled");
   }
 }
-
-void handleNotFound() {
-  String message = "File Not Found\n\n";
-  message += "URI: ";
-  message += server.uri();
-  message += "\nMethod: ";
-  message += (server.method() == HTTP_GET) ? "GET" : "POST";
-  message += "\nArguments: ";
-  message += server.args();
-  message += "\n";
-  for (uint8_t i = 0; i < server.args(); i++) {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
-  }
-  server.send(404, "text/plain", message);
-}
-
 
 void setupWebServer () {
-  server.on("/", handleRoot);
+  wm.server->on("/ota", handleOtaForm);
 
-  server.on("/trigger", []() {
+  wm.server->on("/trigger", []() { // hit this route to cause a momentary activation of the relay
     // momentary activation
     digitalWrite(RELAY, RELAY_ON);
-    digitalWrite(WIFI_LED, LED_ON);
+    digitalWrite(TRIGGER_LED, LED_ON);
     delay(100);
     // deactivate
     digitalWrite(RELAY, RELAY_OFF);
-    digitalWrite(WIFI_LED, LED_OFF);
+    digitalWrite(TRIGGER_LED, LED_OFF);
 
-    server.send(200, "application/json", "{\"message\": \"ok\", \"success\": true}");
+    wm.server->send(200, "application/json", "{\"message\": \"ok\", \"success\": true}");
   });
-
-  server.onNotFound(handleNotFound);
-
-  server.begin();
 }
 
 void setupOta () {
   otaEnabled = true;
 
-  server.on("/update", HTTP_POST, []() {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+  wm.server->on("/ota-post", HTTP_POST, []() {
+    wm.server->sendHeader("Connection", "close");
+    wm.server->send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
     ESP.restart();
   }, []() {
-    HTTPUpload& upload = server.upload();
+    HTTPUpload& upload = wm.server->upload();
     if (upload.status == UPLOAD_FILE_START) {
       Serial.setDebugOutput(true);
       Serial.printf("Update: %s\n", upload.filename.c_str());
@@ -86,11 +64,6 @@ void setupOta () {
     }
     yield();
   });
-}
-
-bool loopWebServer () {
-  server.handleClient();
-  return true;
 }
 
 #endif
